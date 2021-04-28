@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 import ctypes
-import wave
 import sys
-
 
 pa = ctypes.cdll.LoadLibrary('libpulse-simple.so.0')
 
 PA_STREAM_PLAYBACK = 1
 PA_STREAM_RECORD = 2
 PA_SAMPLE_S16LE = 3
-BUFFSIZE = 1024
 
+BUF_NSAMPLES = 1024 # ~23ms @ 44.1kHZ
 
 class struct_pa_sample_spec(ctypes.Structure):
     __slots__ = [
@@ -26,15 +24,12 @@ struct_pa_sample_spec._fields_ = [
 ]
 pa_sample_spec = struct_pa_sample_spec  # /usr/include/pulse/sample.h:174
 
+def rms(samples):
+    return sum([ sample ** 2 for sample in samples ]) / 1024
 
-def main(filename):
-    """Capture a WAV file with PulseAudio."""
 
-    # Opening a file.
-    wf = wave.open(filename, 'wb')
-    wf.setnchannels(1)
-    wf.setsampwidth(2)
-    wf.setframerate(44100)
+def main():
+    """Capture audio with PulseAudio."""
 
     # Defining sample format.
     ss = struct_pa_sample_spec()
@@ -59,32 +54,23 @@ def main(filename):
         raise Exception('Could not create pulse audio stream: {0}!'.format(
             pa.strerror(ctypes.byref(error))))
 
+
+    BUF_TYPE = ctypes.c_int16 * BUF_NSAMPLES
+    peak = 0
     while True:
-        # Getting latency.
-        latency = pa.pa_simple_get_latency(s, error)
-        if latency == -1:
-            raise Exception('Getting latency failed!')
-
-        print('{0} usec'.format(latency))
-
-        buf = ctypes.create_string_buffer(BUFFSIZE)
+        buf = BUF_TYPE()
         if pa.pa_simple_read(s, buf, len(buf), error):
-            raise Exception('Could not read file!')
+            raise Exception('Could not read buffer!')
 
-        # Reading frames and writing to the stream.
-        buf = wf.writeframes(buf)
-        if buf == '':
-            break
+        amplitude = rms(buf)
+        if amplitude > peak:
+            peak = amplitude
+        print('*' * int(rms(buf) // (peak / 100)) + ' ' * 100, end = '\r')
 
-
-    wf.close()
 
     # Freeing resources and closing connection.
     pa.pa_simple_free(s)
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        print('Usage: ./{0} <filename to record>'.format(sys.argv[0]))
-    else:
-        main(sys.argv[1])
+    main()
