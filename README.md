@@ -14,9 +14,9 @@ Spotify --(pulseaudio)--> canbus-dance --(SocketCAN)--> USB2CAN --(OBD2)--> Car'
 DONE
 ----
 * Figure out how to control RPM and speed meter on car's dashboard.
+* Capture PulseAudio sound.
 
 TODO
 ----
-* Capture PulseAudio sound.
 * Do RMS.
 * Convert RMS into SocketCAN message.
