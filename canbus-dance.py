@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import can
 import ctypes
 import sys
 
@@ -8,7 +9,8 @@ PA_STREAM_PLAYBACK = 1
 PA_STREAM_RECORD = 2
 PA_SAMPLE_S16LE = 3
 
-BUF_NSAMPLES = 1024 # ~23ms @ 44.1kHZ
+#BUF_NSAMPLES = 1024 # ~23ms @ 44.1kHZ
+BUF_NSAMPLES = 2048 # ~46ms @ 44.1kHZ
 
 class struct_pa_sample_spec(ctypes.Structure):
     __slots__ = [
@@ -56,21 +58,28 @@ def main():
 
 
     BUF_TYPE = ctypes.c_int16 * BUF_NSAMPLES
-    peak = 0
+    peak = 20000000#0
+
+    bustype = 'socketcan'
+    channel = 'vcan0'
+    bus = can.interface.Bus(channel=channel, bustype=bustype)
+
     while True:
         buf = BUF_TYPE()
         if pa.pa_simple_read(s, buf, len(buf), error):
             raise Exception('Could not read buffer!')
 
         amplitude = rms(buf)
-        if amplitude > peak:
-            peak = amplitude
-        print('*' * int(rms(buf) // (peak / 100)) + ' ' * 100, end = '\r')
+        nstars = min(int(amplitude // (peak / 80)), 80)
+        print('*' * nstars + ' ' * (80 - nstars), end = '\r')
 
+        can_ampli = min(int(amplitude // (peak / 0x5F)), 255)
+        msg = can.Message(arbitration_id=0x38D,
+            data=[can_ampli, 0, 0, 0, 0, 0, 0, 0], is_extended_id=False)
+        bus.send(msg)
 
     # Freeing resources and closing connection.
     pa.pa_simple_free(s)
-
 
 if __name__ == '__main__':
     main()
